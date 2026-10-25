@@ -38,6 +38,7 @@ export default function ConnectDrawer({ open, onClose, apiKey }: Props) {
       {
         mcpServers: {
           "context-ledger": {
+            type: "http",
             url: mcpUrl,
             headers: {
               Authorization: `Bearer ${key}`,
@@ -54,8 +55,8 @@ export default function ConnectDrawer({ open, onClose, apiKey }: Props) {
     ? "•".repeat(Math.min(apiKey.length, 12)) || "••••••••"
     : "••••••••";
 
-  const claudeCodeCommandDisplay = `claude mcp add context-ledger ${mcpUrl} --header "Authorization: Bearer ${maskedKey}"`;
-  const claudeCodeCommandCopy = `claude mcp add context-ledger ${mcpUrl} --header "Authorization: Bearer ${apiKey || "<CONTEXT_LEDGER_API_KEY>"}"`;
+  const claudeCodeCommandDisplay = `claude mcp add --transport http context-ledger ${mcpUrl} --header "Authorization: Bearer ${maskedKey}"`;
+  const claudeCodeCommandCopy = `claude mcp add --transport http context-ledger ${mcpUrl} --header "Authorization: Bearer ${apiKey || "<CONTEXT_LEDGER_API_KEY>"}"`;
 
   if (!open) return null;
 

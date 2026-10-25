@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSceneQuality } from "./use-scene-quality";
 
 interface Props {
@@ -27,6 +27,13 @@ export default function Scene3D({
   fallback = null,
 }: Props) {
   const { pending, webgl, reducedMotion, low } = useSceneQuality();
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    const handleVisibility = () => setHidden(document.hidden);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   if (pending || !webgl || reducedMotion) {
     return (
@@ -41,7 +48,8 @@ export default function Scene3D({
   return (
     <div className={className} role="img" aria-label={label}>
       <Canvas
-        dpr={low ? [1, 1.25] : [1, 1.75]}
+        frameloop={hidden ? "never" : "always"}
+        dpr={low ? 1 : [1, 1.5]}
         camera={{ position: cameraPosition, fov: cameraFov }}
         gl={{
           antialias: !low,

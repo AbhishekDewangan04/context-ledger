@@ -64,17 +64,24 @@ server-side — it lives in that tab's session storage.
 | --- | --- | --- |
 | `resume_project` | `project_id` | Instructs the agent to read handoff, prioritize Fix/Build Next, and check budget regularly. |
 
-Client configuration:
+Client configuration (`.mcp.json`):
 
 ```json
 {
   "mcpServers": {
     "context-ledger": {
+      "type": "http",
       "url": "https://your-app.vercel.app/api/mcp",
       "headers": { "Authorization": "Bearer <CONTEXT_LEDGER_API_KEY>" }
     }
   }
 }
+```
+
+Or connect via the Claude Code CLI:
+
+```bash
+claude mcp add --transport http context-ledger https://your-app.vercel.app/api/mcp --header "Authorization: Bearer <CONTEXT_LEDGER_API_KEY>"
 ```
 
 ## REST (what the dashboard calls)
@@ -126,11 +133,13 @@ caps DPR and lowers particle counts on small or low-core devices, and swaps in a
 WebGL is unavailable or `prefers-reduced-motion` is set. Canvases sit in fixed-height boxes, so
 nothing shifts when they mount.
 
-## Deploy to Vercel
+## Deploy on Vercel
 
-1. Import the repository, set **Root Directory** to `context-ledger`.
-2. Add `CONTEXT_LEDGER_API_KEY`, the Redis pair, and `NEXT_PUBLIC_SITE_URL`.
-3. Deploy. The MCP endpoint is then `https://<your-app>/api/mcp`.
+1. Import the repository into Vercel (set **Root Directory** to `context-ledger` if deployed from a monorepo).
+2. Set the `CONTEXT_LEDGER_API_KEY` environment variable.
+3. Add Upstash Redis from the Vercel Marketplace / Integrations.
+4. If the integration creates variables with a custom prefix, set `KV_REST_API_URL` and `KV_REST_API_TOKEN` manually in your project settings using the REST API values from the Upstash console (be sure to use the active REST token, not the read-only token), then redeploy.
+5. Once deployed, your streamable MCP endpoint is live at `https://<your-app>.vercel.app/api/mcp`.
 
 ## Layout
 

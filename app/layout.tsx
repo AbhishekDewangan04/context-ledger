@@ -20,9 +20,10 @@ const description =
   "A remote MCP server that gives AI clients persistent project memory: decisions, progress, token budget and a one-call handoff summary.";
 
 function siteUrl(): URL {
-  const raw =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const raw = productionUrl
+    ? `https://${productionUrl}`
+    : process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   try {
     return new URL(raw);
   } catch {

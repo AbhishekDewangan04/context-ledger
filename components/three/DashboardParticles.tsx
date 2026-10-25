@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneQuality } from "./use-scene-quality";
@@ -65,6 +65,13 @@ function ParticleCloud({ low }: { low: boolean }) {
 
 export default function DashboardParticles() {
   const { pending, webgl, reducedMotion, low } = useSceneQuality();
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    const handleVisibility = () => setHidden(document.hidden);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   if (pending || !webgl || reducedMotion) {
     return null;
@@ -76,8 +83,9 @@ export default function DashboardParticles() {
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
     >
       <Canvas
+        frameloop={hidden ? "never" : "always"}
         camera={{ position: [0, 0, 7], fov: 60 }}
-        dpr={low ? [1, 1.25] : [1, 1.5]}
+        dpr={low ? 1 : [1, 1.5]}
         gl={{
           antialias: false,
           alpha: true,

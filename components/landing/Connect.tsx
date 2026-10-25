@@ -5,6 +5,7 @@ import { TerminalIcon } from "@/components/ui/icons";
 const CLIENT_CONFIG = `{
   "mcpServers": {
     "context-ledger": {
+      "type": "http",
       "url": "https://your-app.vercel.app/api/mcp",
       "headers": {
         "Authorization": "Bearer <CONTEXT_LEDGER_API_KEY>"
@@ -12,6 +13,8 @@ const CLIENT_CONFIG = `{
     }
   }
 }`;
+
+const CLAUDE_COMMAND = `claude mcp add --transport http context-ledger https://your-app.vercel.app/api/mcp --header "Authorization: Bearer <CONTEXT_LEDGER_API_KEY>"`;
 
 const CURL = `curl -s https://your-app.vercel.app/api/mcp \\
   -H "Authorization: Bearer $CONTEXT_LEDGER_API_KEY" \\
@@ -35,9 +38,9 @@ export default function Connect() {
         </p>
       </Reveal>
 
-      <div className="mt-10 grid gap-5 lg:grid-cols-2">
+      <div className="mt-10 grid gap-5 lg:grid-cols-3">
         <Reveal>
-          <div className="glass-card h-full p-5">
+          <div className="glass-card flex h-full flex-col p-5">
             <div className="flex items-center justify-between gap-3">
               <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
                 <TerminalIcon className="text-cyan" />
@@ -45,22 +48,40 @@ export default function Connect() {
               </h3>
               <CopyButton value={CLIENT_CONFIG} label="Copy config" />
             </div>
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-line bg-base/70 p-4 font-mono text-[11px] leading-relaxed text-faint">
+            <pre className="mt-4 flex-1 overflow-x-auto rounded-xl border border-line bg-base/70 p-4 font-mono text-[11px] leading-relaxed text-faint">
               <code>{CLIENT_CONFIG}</code>
             </pre>
           </div>
         </Reveal>
 
-        <Reveal delay={0.08}>
-          <div className="glass-card h-full p-5">
+        <Reveal delay={0.06}>
+          <div className="glass-card flex h-full flex-col p-5">
             <div className="flex items-center justify-between gap-3">
               <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
                 <TerminalIcon className="text-violet-soft" />
+                Claude Code CLI
+              </h3>
+              <CopyButton value={CLAUDE_COMMAND} label="Copy command" />
+            </div>
+            <pre className="mt-4 flex-1 overflow-x-auto rounded-xl border border-line bg-base/70 p-4 font-mono text-[11px] leading-relaxed text-faint break-all whitespace-pre-wrap">
+              <code>{CLAUDE_COMMAND}</code>
+            </pre>
+            <p className="mt-3 text-xs text-faint">
+              Direct connection via streamable HTTP transport.
+            </p>
+          </div>
+        </Reveal>
+
+        <Reveal delay={0.12}>
+          <div className="glass-card flex h-full flex-col p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
+                <TerminalIcon className="text-cyan" />
                 tools/list
               </h3>
               <CopyButton value={CURL} label="Copy curl" />
             </div>
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-line bg-base/70 p-4 font-mono text-[11px] leading-relaxed text-faint">
+            <pre className="mt-4 flex-1 overflow-x-auto rounded-xl border border-line bg-base/70 p-4 font-mono text-[11px] leading-relaxed text-faint">
               <code>{CURL}</code>
             </pre>
             <p className="mt-3 text-xs text-faint">
