@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import GradientText from "@/components/ui/GradientText";
 import MagneticButton from "@/components/ui/MagneticButton";
 import { ArrowRightIcon, NodesIcon } from "@/components/ui/icons";
+import { handleAnchorClick } from "@/lib/scroll";
 
 const MemoryCore = dynamic(() => import("@/components/three/MemoryCore"), { ssr: false });
 
@@ -42,7 +43,11 @@ export default function Hero() {
               Open the dashboard
               <ArrowRightIcon />
             </MagneticButton>
-            <MagneticButton href="#connect" variant="ghost">
+            <MagneticButton
+              href="#connect"
+              onClick={(e) => handleAnchorClick(e, "#connect")}
+              variant="ghost"
+            >
               Connect over MCP
             </MagneticButton>
           </div>

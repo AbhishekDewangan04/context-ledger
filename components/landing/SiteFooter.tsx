@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { NodesIcon } from "@/components/ui/icons";
+import { handleAnchorClick } from "@/lib/scroll";
 
 export default function SiteFooter() {
   return (
@@ -21,12 +24,20 @@ export default function SiteFooter() {
               </Link>
             </li>
             <li>
-              <a href="#tools" className="transition-colors hover:text-ink">
+              <a
+                href="#tools"
+                onClick={(e) => handleAnchorClick(e, "#tools")}
+                className="transition-colors hover:text-ink"
+              >
                 Tools
               </a>
             </li>
             <li>
-              <a href="#connect" className="transition-colors hover:text-ink">
+              <a
+                href="#connect"
+                onClick={(e) => handleAnchorClick(e, "#connect")}
+                className="transition-colors hover:text-ink"
+              >
                 Connect
               </a>
             </li>

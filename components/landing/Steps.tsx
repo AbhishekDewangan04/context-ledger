@@ -45,7 +45,7 @@ const STEPS: Step[] = [
 
 export default function Steps() {
   return (
-    <section id="how" className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-24" aria-labelledby="how-heading">
+    <section id="how" className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-24 scroll-mt-20 sm:scroll-mt-24" aria-labelledby="how-heading">
       <Reveal>
         <p className="text-xs uppercase tracking-[0.2em] text-cyan">How it works</p>
         <h2 id="how-heading" className="mt-3 max-w-2xl font-display text-3xl tracking-tight sm:text-4xl">

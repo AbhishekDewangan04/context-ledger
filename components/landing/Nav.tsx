@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import MagneticButton from "@/components/ui/MagneticButton";
 import { ArrowRightIcon, NodesIcon } from "@/components/ui/icons";
+import { handleAnchorClick } from "@/lib/scroll";
 
 const LINKS = [
   { href: "#problem", label: "Why" },
@@ -26,7 +29,11 @@ export default function Nav() {
         <ul className="hidden items-center gap-7 text-sm text-faint md:flex">
           {LINKS.map((link) => (
             <li key={link.href}>
-              <a href={link.href} className="transition-colors hover:text-ink">
+              <a
+                href={link.href}
+                onClick={(e) => handleAnchorClick(e, link.href)}
+                className="transition-colors hover:text-ink"
+              >
                 {link.label}
               </a>
             </li>

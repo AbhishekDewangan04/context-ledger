@@ -50,7 +50,7 @@ const TOOLS: ToolSpec[] = [
 
 export default function Tools() {
   return (
-    <section id="tools" className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-24" aria-labelledby="tools-heading">
+    <section id="tools" className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-24 scroll-mt-20 sm:scroll-mt-24" aria-labelledby="tools-heading">
       <Reveal>
         <p className="text-xs uppercase tracking-[0.2em] text-violet-soft">The surface</p>
         <h2 id="tools-heading" className="mt-3 max-w-2xl font-display text-3xl tracking-tight sm:text-4xl">

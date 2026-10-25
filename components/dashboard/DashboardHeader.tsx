@@ -41,10 +41,11 @@ export default function DashboardHeader({ title, subtitle, apiKey, onLock }: Pro
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
+              aria-label="Connect client"
               className="inline-flex items-center gap-1.5 rounded-full border border-cyan/40 bg-cyan/10 px-3 py-1.5 text-xs font-medium text-cyan transition-colors hover:bg-cyan/20 hover:border-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan"
             >
               <TerminalIcon className="text-sm" />
-              Connect
+              Connect client
             </button>
 
             {onLock ? (

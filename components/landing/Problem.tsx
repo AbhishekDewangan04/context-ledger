@@ -19,7 +19,7 @@ export default function Problem() {
   return (
     <section
       id="problem"
-      className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-24"
+      className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-24 scroll-mt-20 sm:scroll-mt-24"
       aria-labelledby="problem-heading"
     >
       <Reveal>

@@ -8,7 +8,7 @@ import { useRef } from "react";
 interface Props {
   children: ReactNode;
   href?: string;
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   type?: "button" | "submit";
   disabled?: boolean;
   variant?: "primary" | "ghost";
@@ -67,7 +67,7 @@ export default function MagneticButton({
   if (href) {
     return (
       <motion.div ref={ref} {...motionProps}>
-        <Link href={href} className={classes} aria-label={ariaLabel}>
+        <Link href={href} onClick={onClick} className={classes} aria-label={ariaLabel}>
           {children}
         </Link>
       </motion.div>
