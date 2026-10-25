@@ -36,7 +36,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <DashboardHeader title="Projects" subtitle="Polling every 10 seconds" onLock={lock} />
+      <DashboardHeader title="Projects" subtitle="Polling every 10 seconds" apiKey={apiKey} onLock={lock} />
       <main id="main" className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
         <ProjectList apiKey={apiKey} onInvalidKey={lock} />
       </main>

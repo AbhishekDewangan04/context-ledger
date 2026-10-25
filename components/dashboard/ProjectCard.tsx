@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRightIcon } from "@/components/ui/icons";
 import type { ProjectSummaryView } from "@/lib/api";
-import { ACTION_LABEL, budgetColor, formatRelative } from "@/lib/presentation";
+import { budgetActionBadge, formatRelative } from "@/lib/presentation";
 
 interface Props {
   project: ProjectSummaryView;
@@ -13,7 +13,7 @@ interface Props {
 
 export default function ProjectCard({ project, index }: Props) {
   const budget = project.latest_budget;
-  const tone = budget ? budgetColor(budget.percent) : null;
+  const badge = budget ? budgetActionBadge(budget.action) : null;
 
   return (
     <motion.li
@@ -40,9 +40,12 @@ export default function ProjectCard({ project, index }: Props) {
           <span className="rounded-full border border-line px-2.5 py-1 text-faint">
             {project.entry_count} {project.entry_count === 1 ? "entry" : "entries"}
           </span>
-          {budget && tone ? (
-            <span className={`rounded-full px-2.5 py-1 font-medium ${tone.text} bg-glass`}>
-              {budget.percent}% · {ACTION_LABEL[budget.action]}
+          {budget && badge ? (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium ${badge.className}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${badge.dotColor}`} aria-hidden="true" />
+              {budget.percent}% · {badge.label}
             </span>
           ) : (
             <span className="rounded-full border border-line px-2.5 py-1 text-faint">

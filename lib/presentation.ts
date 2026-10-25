@@ -59,6 +59,33 @@ export const ACTION_LABEL: Record<BudgetActionName, string> = {
   stop_and_summarize: "stop_and_summarize",
 };
 
+export function budgetActionBadge(action: BudgetActionName): {
+  label: string;
+  className: string;
+  dotColor: string;
+} {
+  switch (action) {
+    case "continue":
+      return {
+        label: "continue",
+        className: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
+        dotColor: "bg-emerald-400",
+      };
+    case "warn":
+      return {
+        label: "warn",
+        className: "bg-amber-500/10 text-amber-400 border border-amber-500/30",
+        dotColor: "bg-amber-400",
+      };
+    case "stop_and_summarize":
+      return {
+        label: "stop_and_summarize",
+        className: "bg-rose-500/10 text-rose-400 border border-rose-500/30",
+        dotColor: "bg-rose-400",
+      };
+  }
+}
+
 export function formatNumber(value: number): string {
   return value.toLocaleString("en-US");
 }

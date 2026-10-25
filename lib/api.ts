@@ -71,3 +71,20 @@ export async function fetchProjects(apiKey: string): Promise<ProjectSummaryView[
 export async function fetchProjectDetail(id: string, apiKey: string): Promise<ProjectDetailView> {
   return request<ProjectDetailView>(`/api/projects/${encodeURIComponent(id)}`, apiKey);
 }
+
+export async function archiveProjectApi(id: string, apiKey: string): Promise<{ ok: boolean }> {
+  const response = await fetch(`/api/projects/${encodeURIComponent(id)}/archive`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}` },
+    cache: "no-store",
+  });
+
+  if (response.status === 401) throw new InvalidApiKeyError();
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(body?.message ?? `The ledger answered with ${response.status}.`);
+  }
+
+  return (await response.json()) as { ok: boolean };
+}

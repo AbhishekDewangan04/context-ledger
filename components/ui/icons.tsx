@@ -113,3 +113,21 @@ export function SparkIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+export function ArchiveIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="3" y="4" width="18" height="4" rx="1" />
+      <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
+      <path d="M10 12h4" />
+    </Glyph>
+  );
+}
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </Glyph>
+  );
+}

@@ -30,8 +30,8 @@ export default function Connect() {
         <p className="mt-4 max-w-2xl text-faint">
           Streamable HTTP at <span className="font-mono text-ink">POST /api/mcp</span>. Point any MCP
           client at it, send the key you set as{" "}
-          <span className="font-mono text-ink">CONTEXT_LEDGER_API_KEY</span>, and the seven tools show
-          up.
+          <span className="font-mono text-ink">CONTEXT_LEDGER_API_KEY</span>, and the seven tools plus
+          the <span className="font-mono text-ink">resume_project</span> Resume prompt show up.
         </p>
       </Reveal>
 
