@@ -5,10 +5,12 @@ import {
   BUDGET_GUIDANCE,
   LIMITS,
   LedgerError,
+  archiveProject,
   createProject,
   formatCount,
   getHandoffSummary,
   isAuthorizedRequest,
+  listProjects,
   logDecision,
   logProgress,
   recordBudget,
@@ -16,7 +18,7 @@ import {
 } from "@/lib/ledger";
 import { rateLimit } from "@/lib/rate-limit";
 
-import type { CallToolResult } from "@modelcontextprotocol/server";
+import type { CallToolResult, GetPromptResult } from "@modelcontextprotocol/server";
 
 export const runtime = "nodejs";
 
@@ -164,6 +166,79 @@ const handler = createMcpHandler(
         } catch (error) {
           return failed(error);
         }
+      },
+    );
+
+    server.registerTool(
+      "list_projects",
+      {
+        title: "List projects",
+        description:
+          "List active projects in the Context Ledger. Returns id, name, goal, updated_at, entry_count and latest budget action, newest first.",
+        inputSchema: z.object({}),
+      },
+      async () => {
+        try {
+          const projects = await listProjects();
+          if (projects.length === 0) {
+            return ok("No active projects found. Call create_project to start one.");
+          }
+          const formatted = projects
+            .map((project) => {
+              const budgetAction = project.latest_budget?.action ?? "none";
+              return `- ${project.name} (id: ${project.id})\n  Goal: ${project.goal}\n  Updated: ${project.updated_at}\n  Entries: ${project.entry_count}\n  Latest budget action: ${budgetAction}`;
+            })
+            .join("\n\n");
+          return ok(`Active projects (${projects.length}):\n\n${formatted}`);
+        } catch (error) {
+          return failed(error);
+        }
+      },
+    );
+
+    server.registerTool(
+      "archive_project",
+      {
+        title: "Archive project",
+        description:
+          "Archive a project. Hides it from list_projects, GET /api/projects, and the dashboard.",
+        inputSchema: z.object({
+          project_id: projectId,
+        }),
+      },
+      async ({ project_id }) => {
+        try {
+          const project = await archiveProject(project_id);
+          return ok(`Archived project "${project.name}" (id: ${project.id}).`);
+        } catch (error) {
+          return failed(error);
+        }
+      },
+    );
+
+    server.registerPrompt(
+      "resume_project",
+      {
+        title: "Resume project",
+        description:
+          "Resume work on an existing project. Tells the agent to call get_handoff_summary, continue Fix Next / Build Next items, and monitor token budget with check_budget.",
+        argsSchema: z.object({
+          project_id: projectId,
+        }),
+      },
+      async ({ project_id }): Promise<GetPromptResult> => {
+        return {
+          description: `Resume work on project ${project_id}`,
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: `Resume work on project "${project_id}". First, call get_handoff_summary with project_id: "${project_id}". Review the decisions, what was built, and existing issues. Then, continue working on the "Fix Next" and "Build Next" items. Regularly call check_budget to monitor token usage and respect budget thresholds. When wrapping up or when the budget requires, log your progress and decisions.`,
+              },
+            },
+          ],
+        };
       },
     );
   },

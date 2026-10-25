@@ -41,22 +41,28 @@ restart). On a hosted deployment (`VERCEL_ENV=production` or `preview`) requests
 
 | Route | What it is |
 | --- | --- |
-| `/` | Landing page: 3D memory core, how it works, the five tools, connect snippet. |
+| `/` | Landing page: 3D memory core, how it works, the seven tools, connect snippet. |
 | `/dashboard` | API-key gate (sessionStorage) → every project, polling every 10s. |
 | `/dashboard/[id]` | Entry timeline, 3D budget gauge, markdown handoff with copy + download. |
 
 The dashboard reads the REST routes below with the same bearer key. It never stores the key
 server-side — it lives in that tab's session storage.
 
-## MCP tools
+## MCP tools & prompts
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
 | `create_project` | `name`, `goal` | The `project_id` used by every other tool. |
+| `list_projects` | — | Non-archived projects with goal, updated_at, entry count and latest budget action. |
+| `archive_project` | `project_id` | Hides the project from listings and the dashboard. |
 | `log_decision` | `project_id`, `decision`, `reason` | The stored decision entry. |
 | `log_progress` | `project_id`, `built`, `broken?`, `next?` | The stored progress / issue / next entries. |
 | `check_budget` | `project_id`, `tokens_used`, `token_limit` | Percent used and the action: `continue` (<80%), `warn` (80-89%), `stop_and_summarize` (>=90%). |
-| `get_handoff_summary` | `project_id` | Markdown with Started With, Built, Decisions, Fix Next, Build Next, Budget Status. |
+| `get_handoff_summary` | `project_id` | Capped markdown across six sections, keeping newest entries with omitted count. |
+
+| Prompt | Arguments | Purpose |
+| --- | --- | --- |
+| `resume_project` | `project_id` | Instructs the agent to read handoff, prioritize Fix/Build Next, and check budget regularly. |
 
 Client configuration:
 
@@ -91,7 +97,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/api/mcp \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 
-# tools/list returns exactly 5 tools
+# tools/list returns exactly 7 tools
 curl -s $BASE/api/mcp -H "$AUTH" -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
@@ -131,7 +137,7 @@ nothing shifts when they mount.
 ```
 context-ledger/
 ├── app/
-│   ├── api/mcp/route.ts            # MCP server (5 tools), bearer auth
+│   ├── api/mcp/route.ts            # MCP server (7 tools, 1 prompt), bearer auth
 │   ├── api/projects/route.ts       # REST: list projects
 │   ├── api/projects/[id]/route.ts  # REST: project detail + summary
 │   ├── dashboard/page.tsx          # projects

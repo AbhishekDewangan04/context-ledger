@@ -29,6 +29,7 @@ export const LIMITS = {
   entriesPerProject: 200,
   budgetSnapshotsPerProject: 50,
   projectsListed: 200,
+  handoffEntriesPerSection: 5,
 } as const;
 
 export type EntryType = "decision" | "progress" | "issue" | "next";
@@ -65,6 +66,7 @@ export interface ProjectRecord {
   updated_at: string;
   entries: LedgerEntry[];
   budget_snapshots: BudgetSnapshot[];
+  archived?: boolean;
 }
 
 export interface ProjectSummary {
@@ -333,6 +335,7 @@ function normalizeProject(project: ProjectRecord): ProjectRecord {
     ...project,
     entries: Array.isArray(project.entries) ? project.entries : [],
     budget_snapshots: Array.isArray(project.budget_snapshots) ? project.budget_snapshots : [],
+    archived: Boolean(project.archived),
   };
 }
 
@@ -365,6 +368,7 @@ export async function createProject(input: { name: unknown; goal: unknown }): Pr
     updated_at: now,
     entries: [],
     budget_snapshots: [],
+    archived: false,
   };
 
   await getStore().put(project);
@@ -471,13 +475,24 @@ export async function recordBudget(input: {
   return { project: updated, snapshot };
 }
 
+export async function archiveProject(projectId: unknown): Promise<ProjectRecord> {
+  const project = await getProject(projectId);
+  const updated: ProjectRecord = {
+    ...project,
+    archived: true,
+    updated_at: new Date().toISOString(),
+  };
+  await getStore().put(updated);
+  return updated;
+}
+
 export async function listProjects(): Promise<ProjectSummary[]> {
   const ledger = getStore();
   const ids = (await ledger.ids()).slice(0, LIMITS.projectsListed);
   const records = await Promise.all(ids.map((id) => ledger.get(id)));
 
   return records
-    .filter((record): record is ProjectRecord => Boolean(record))
+    .filter((record): record is ProjectRecord => Boolean(record && !record.archived))
     .map((record) => {
       const project = normalizeProject(record);
       return {
@@ -495,6 +510,9 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 
 export async function getProjectDetail(projectId: unknown): Promise<ProjectDetail> {
   const project = await getProject(projectId);
+  if (project.archived) {
+    throw new LedgerError("not_found", `Project "${project.id}" has been archived.`);
+  }
   return {
     project: {
       id: project.id,
@@ -524,7 +542,30 @@ function pushSection(lines: string[], heading: string, body: string[]): void {
   lines.push("");
 }
 
-export function buildHandoffSummary(project: ProjectRecord): string {
+function pushCappedSection(
+  lines: string[],
+  heading: string,
+  body: string[],
+  limit: number = LIMITS.handoffEntriesPerSection,
+): void {
+  lines.push(`## ${heading}`);
+  lines.push("");
+  if (body.length === 0) {
+    lines.push("_Nothing logged yet._");
+  } else if (body.length <= limit) {
+    lines.push(...body);
+  } else {
+    const omitted = body.length - limit;
+    lines.push(`_(${omitted} older ${omitted === 1 ? "entry" : "entries"} omitted)_`);
+    lines.push(...body.slice(-limit));
+  }
+  lines.push("");
+}
+
+export function buildHandoffSummary(
+  project: ProjectRecord,
+  maxSectionEntries: number = LIMITS.handoffEntriesPerSection,
+): string {
   const entriesOf = (type: EntryType) => project.entries.filter((entry) => entry.type === type);
   const latest = latestBudget(project);
   const lines: string[] = [];
@@ -539,30 +580,34 @@ export function buildHandoffSummary(project: ProjectRecord): string {
 
   pushSection(lines, "Started With", [`Goal: ${project.goal}`, "", `Project opened ${project.created_at}.`]);
 
-  pushSection(
+  pushCappedSection(
     lines,
     "Built",
     entriesOf("progress").map((entry) => `- ${entry.text}`),
+    maxSectionEntries,
   );
 
-  pushSection(
+  pushCappedSection(
     lines,
     "Decisions",
     entriesOf("decision").map((entry) =>
       entry.reason ? `- ${entry.text} — because: ${entry.reason}` : `- ${entry.text}`,
     ),
+    maxSectionEntries,
   );
 
-  pushSection(
+  pushCappedSection(
     lines,
     "Fix Next",
     entriesOf("issue").map((entry) => `- ${entry.text}`),
+    maxSectionEntries,
   );
 
-  pushSection(
+  pushCappedSection(
     lines,
     "Build Next",
     entriesOf("next").map((entry) => `- ${entry.text}`),
+    maxSectionEntries,
   );
 
   pushSection(
@@ -582,7 +627,8 @@ export function buildHandoffSummary(project: ProjectRecord): string {
 
 export async function getHandoffSummary(
   projectId: unknown,
+  maxSectionEntries?: number,
 ): Promise<{ project: ProjectRecord; summary: string }> {
   const project = await getProject(projectId);
-  return { project, summary: buildHandoffSummary(project) };
+  return { project, summary: buildHandoffSummary(project, maxSectionEntries) };
 }

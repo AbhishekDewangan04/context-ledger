@@ -11,6 +11,18 @@ const TOOLS: ToolSpec[] = [
     tone: "bg-violet",
   },
   {
+    name: "list_projects",
+    args: "—",
+    returns: "Lists active projects with goal, entry count and latest budget status.",
+    tone: "bg-cyan",
+  },
+  {
+    name: "archive_project",
+    args: "project_id",
+    returns: "Hides finished or inactive projects from listings and the dashboard.",
+    tone: "bg-faint",
+  },
+  {
     name: "log_decision",
     args: "project_id, decision, reason",
     returns: "Stores the call and the reasoning, so it is not re-litigated next session.",
@@ -42,7 +54,7 @@ export default function Tools() {
       <Reveal>
         <p className="text-xs uppercase tracking-[0.2em] text-violet-soft">The surface</p>
         <h2 id="tools-heading" className="mt-3 max-w-2xl font-display text-3xl tracking-tight sm:text-4xl">
-          Five tools, no ceremony
+          Seven tools, no ceremony
         </h2>
         <p className="mt-4 max-w-2xl text-faint">
           Every tool returns something an agent can act on immediately. Nothing to page through,

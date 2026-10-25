@@ -28,7 +28,7 @@ export default function OpengraphImage() {
             Persistent memory for AI coding agents
           </div>
           <div style={{ display: "flex", fontSize: "30px", color: "#9A9DB4" }}>
-            5 MCP tools · budget guardrails · one-call handoff
+            7 MCP tools · budget guardrails · one-call handoff
           </div>
         </div>
         <div style={{ display: "flex", fontSize: "24px", color: "#22D3EE" }}>POST /api/mcp</div>

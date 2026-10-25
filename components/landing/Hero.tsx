@@ -8,7 +8,7 @@ import { ArrowRightIcon, NodesIcon } from "@/components/ui/icons";
 const MemoryCore = dynamic(() => import("@/components/three/MemoryCore"), { ssr: false });
 
 const STATS = [
-  { value: "5", label: "MCP tools" },
+  { value: "7", label: "MCP tools" },
   { value: "90%", label: "stop threshold" },
   { value: "1", label: "call to hand off" },
 ];
