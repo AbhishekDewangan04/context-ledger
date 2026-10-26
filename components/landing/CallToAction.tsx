@@ -14,7 +14,7 @@ export default function CallToAction() {
               Give the next session <GradientText>the memory of the last one</GradientText>
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-faint">
-              Watch a seeded project move through decisions, budget warnings and a full handoff.
+              See decisions, budget warnings and a full handoff in the dashboard.
             </p>
             <div className="mt-8 flex justify-center">
               <MagneticButton href="/dashboard" ariaLabel="Open the dashboard">

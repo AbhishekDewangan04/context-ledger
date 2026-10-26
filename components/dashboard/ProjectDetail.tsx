@@ -99,7 +99,6 @@ export default function ProjectDetail({ projectId, apiKey, onInvalidKey }: Props
         <StatTile
           label="Last update"
           value={formatRelative(data.project.updated_at)}
-          hint={status === "error" ? "retrying every 10s" : "polling every 10s"}
         />
       </div>
 

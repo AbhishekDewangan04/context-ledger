@@ -139,7 +139,7 @@ export default function MemoryCore() {
     <Scene3D
       className="h-full w-full"
       label="Animated memory core: a glowing wireframe icosahedron with linked orbiting nodes that reacts to your cursor and scroll"
-      cameraPosition={[0, 0, 5]}
+      cameraPosition={[0, 0, 5.8]}
       fallback={<CoreGlow />}
     >
       <CoreScene />

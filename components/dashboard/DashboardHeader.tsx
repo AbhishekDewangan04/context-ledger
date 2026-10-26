@@ -24,6 +24,13 @@ export default function DashboardHeader({ title, subtitle, apiKey, onLock }: Pro
           <div className="flex items-center gap-3">
             <Link
               href="/"
+              className="inline-flex items-center gap-1.5 text-xs text-faint transition-colors hover:text-cyan mr-1"
+            >
+              ← Back to site
+            </Link>
+            <span className="text-faint">/</span>
+            <Link
+              href="/"
               className="flex items-center gap-2.5 text-sm font-semibold tracking-tight transition-colors hover:text-cyan"
             >
               <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet/15 text-violet-soft">

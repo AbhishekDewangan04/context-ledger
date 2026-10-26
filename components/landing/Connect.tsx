@@ -64,7 +64,7 @@ export default function Connect() {
       </Reveal>
 
       <div className="mt-10 grid gap-5 lg:grid-cols-3">
-        <Reveal>
+        <Reveal className="h-full">
           <div className="glass-card flex h-full flex-col p-5">
             <div className="flex items-center justify-between gap-3">
               <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
@@ -82,7 +82,7 @@ export default function Connect() {
           </div>
         </Reveal>
 
-        <Reveal delay={0.06}>
+        <Reveal delay={0.06} className="h-full">
           <div className="glass-card flex h-full flex-col p-5">
             <div className="flex items-center justify-between gap-3">
               <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
@@ -100,7 +100,7 @@ export default function Connect() {
           </div>
         </Reveal>
 
-        <Reveal delay={0.12}>
+        <Reveal delay={0.12} className="h-full">
           <div className="glass-card flex h-full flex-col p-5">
             <div className="flex items-center justify-between gap-3">
               <h3 className="flex items-center gap-2 text-sm font-medium text-ink">

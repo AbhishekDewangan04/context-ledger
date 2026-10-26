@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CopyButton from "@/components/ui/CopyButton";
 import { CloseIcon, TerminalIcon } from "@/components/ui/icons";
 
@@ -12,6 +12,8 @@ interface Props {
 
 export default function ConnectDrawer({ open, onClose, apiKey }: Props) {
   const [origin, setOrigin] = useState("");
+  const drawerRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -19,20 +21,103 @@ export default function ConnectDrawer({ open, onClose, apiKey }: Props) {
     }
   }, []);
 
+  // Save active element when opening to restore focus on close
+  useEffect(() => {
+    if (open) {
+      triggerRef.current = document.activeElement as HTMLElement | null;
+    } else if (triggerRef.current) {
+      triggerRef.current.focus();
+      triggerRef.current = null;
+    }
+  }, [open]);
+
+  // Lock body scroll while open
   useEffect(() => {
     if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
     };
+  }, [open]);
+
+  // Handle Escape key and focus trap
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+
+      if (e.key === "Tab" && drawerRef.current) {
+        const focusableElements = drawerRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
+    };
+
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
+
+  // Focus the first focusable element inside drawer upon opening
+  useEffect(() => {
+    if (open && drawerRef.current) {
+      const focusableElements = drawerRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusableElements.length > 0) {
+        focusableElements[0].focus();
+      }
+    }
+  }, [open]);
 
   const mcpUrl = useMemo(() => {
     return origin ? `${origin}/api/mcp` : "/api/mcp";
   }, [origin]);
 
-  const clientConfig = useMemo(() => {
+  const maskedKey = apiKey
+    ? "•".repeat(Math.min(apiKey.length, 12)) || "••••••••"
+    : "••••••••";
+
+  // Client config: visible display has masked key; copy has real key
+  const clientConfigDisplay = useMemo(() => {
+    return JSON.stringify(
+      {
+        mcpServers: {
+          "context-ledger": {
+            type: "http",
+            url: mcpUrl,
+            headers: {
+              Authorization: `Bearer ${maskedKey}`,
+            },
+          },
+        },
+      },
+      null,
+      2,
+    );
+  }, [mcpUrl, maskedKey]);
+
+  const clientConfigCopy = useMemo(() => {
     const key = apiKey || "<CONTEXT_LEDGER_API_KEY>";
     return JSON.stringify(
       {
@@ -51,10 +136,6 @@ export default function ConnectDrawer({ open, onClose, apiKey }: Props) {
     );
   }, [mcpUrl, apiKey]);
 
-  const maskedKey = apiKey
-    ? "•".repeat(Math.min(apiKey.length, 12)) || "••••••••"
-    : "••••••••";
-
   const claudeCodeCommandDisplay = `claude mcp add --transport http context-ledger ${mcpUrl} --header "Authorization: Bearer ${maskedKey}"`;
   const claudeCodeCommandCopy = `claude mcp add --transport http context-ledger ${mcpUrl} --header "Authorization: Bearer ${apiKey || "<CONTEXT_LEDGER_API_KEY>"}"`;
 
@@ -67,7 +148,7 @@ export default function ConnectDrawer({ open, onClose, apiKey }: Props) {
       aria-labelledby="connect-drawer-title"
       className="fixed inset-0 z-50 flex justify-end"
     >
-      {/* Backdrop */}
+      {/* Backdrop (click outside to close) */}
       <div
         className="fixed inset-0 bg-base/80 backdrop-blur-sm transition-opacity"
         onClick={onClose}
@@ -75,7 +156,10 @@ export default function ConnectDrawer({ open, onClose, apiKey }: Props) {
       />
 
       {/* Drawer content */}
-      <aside className="glass-card relative z-10 flex h-full w-full max-w-md flex-col border-l border-line bg-base-elevated/95 p-6 shadow-2xl backdrop-blur-2xl sm:p-8 overflow-y-auto">
+      <aside
+        ref={drawerRef}
+        className="glass-card relative z-10 flex h-full w-full max-w-md flex-col border-l border-line bg-base-elevated/95 p-6 shadow-2xl backdrop-blur-2xl sm:p-8 overflow-y-auto"
+      >
         <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
           <div className="flex items-center gap-2">
             <span className="grid h-7 w-7 place-items-center rounded-lg bg-cyan/15 text-cyan">
@@ -115,10 +199,10 @@ export default function ConnectDrawer({ open, onClose, apiKey }: Props) {
               <span className="text-[10px] font-medium uppercase tracking-wider text-faint">
                 Client Config (mcpServers)
               </span>
-              <CopyButton value={clientConfig} label="Copy Config" />
+              <CopyButton value={clientConfigCopy} label="Copy Config" />
             </div>
             <pre className="overflow-x-auto rounded-xl border border-line bg-base/80 p-4 font-mono text-[11px] leading-relaxed text-faint">
-              <code>{clientConfig}</code>
+              <code>{clientConfigDisplay}</code>
             </pre>
           </div>
 

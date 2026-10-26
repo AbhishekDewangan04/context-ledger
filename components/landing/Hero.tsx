@@ -62,7 +62,7 @@ export default function Hero() {
           </dl>
         </div>
 
-        <div className="relative h-[320px] w-full sm:h-[400px] lg:h-[520px]">
+        <div className="relative h-[320px] w-full px-2 sm:h-[400px] sm:px-4 lg:h-[520px]">
           <MemoryCore />
         </div>
       </div>

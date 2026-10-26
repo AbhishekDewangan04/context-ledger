@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { InvalidApiKeyError, fetchProjects } from "@/lib/api";
 import { writeApiKey } from "@/lib/api-key";
@@ -52,6 +53,15 @@ export default function ApiKeyGate({ onUnlock }: Props) {
       className="mx-auto flex min-h-[80vh] max-w-md flex-col justify-center px-5 py-16"
     >
       <div className="glass-card p-7">
+        <div className="mb-4">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs text-faint transition-colors hover:text-cyan"
+          >
+            ← Back to site
+          </Link>
+        </div>
+
         <span className="grid h-11 w-11 place-items-center rounded-xl bg-violet/15 text-violet-soft">
           <LockIcon className="text-xl" />
         </span>
@@ -78,7 +88,7 @@ export default function ApiKeyGate({ onUnlock }: Props) {
               aria-describedby="api-key-hint"
               aria-invalid={Boolean(error)}
               className="w-full rounded-xl border border-line bg-base/70 px-3.5 py-2.5 font-mono text-sm text-ink placeholder:text-faint/70 focus:border-cyan/60 focus:outline-none focus:ring-2 focus:ring-cyan/40"
-              placeholder="paste CONTEXT_LEDGER_API_KEY"
+              placeholder="Paste your API key"
             />
             <p id="api-key-hint" className="text-xs text-faint">
               Find it in your environment variables, or run{" "}
