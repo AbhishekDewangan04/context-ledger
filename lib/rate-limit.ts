@@ -82,17 +82,36 @@ function checkMemoryRateLimit(
   return { success: false, reset: entry.resetAt };
 }
 
-export function getClientIp(request: Request): string {
+export interface ClientIpInfo {
+  ip: string;
+  isSharedFallback: boolean;
+}
+
+let warnedMissingIp = false;
+
+export function getClientIpInfo(request: Request): ClientIpInfo {
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
     const ip = forwarded.split(",")[0].trim();
-    if (ip) return ip;
+    if (ip.length > 0) {
+      return { ip, isSharedFallback: false };
+    }
   }
   const realIp = request.headers.get("x-real-ip");
-  if (realIp && realIp.trim()) {
-    return realIp.trim();
+  if (realIp && realIp.trim().length > 0) {
+    return { ip: realIp.trim(), isSharedFallback: false };
   }
-  return "127.0.0.1";
+  if (!warnedMissingIp) {
+    warnedMissingIp = true;
+    console.warn(
+      "[context-ledger] Request missing IP headers (x-forwarded-for / x-real-ip). Using stricter shared bucket (20/min).",
+    );
+  }
+  return { ip: "shared-fallback", isSharedFallback: true };
+}
+
+export function getClientIp(request: Request): string {
+  return getClientIpInfo(request).ip;
 }
 
 export interface RateLimitConfig {
@@ -105,12 +124,13 @@ export async function rateLimit(
   request: Request,
   config: RateLimitConfig,
 ): Promise<Response | null> {
-  const ip = getClientIp(request);
+  const { ip, isSharedFallback } = getClientIpInfo(request);
   const prefix = config.prefix ?? "default";
+  const limit = isSharedFallback ? 20 : config.limit;
   const key = `${prefix}:${ip}`;
   const now = Date.now();
 
-  const upstashLimiter = getUpstashLimiter(prefix, config.limit);
+  const upstashLimiter = getUpstashLimiter(prefix, limit);
   if (upstashLimiter) {
     const res = await upstashLimiter.limit(ip);
     if (!res.success) {
@@ -133,7 +153,7 @@ export async function rateLimit(
 
   const { success, reset } = checkMemoryRateLimit(
     key,
-    config.limit,
+    limit,
     config.windowMs ?? 60_000,
   );
 

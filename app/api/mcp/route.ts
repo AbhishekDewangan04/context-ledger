@@ -6,15 +6,17 @@ import {
   LIMITS,
   LedgerError,
   archiveProject,
+  authErrorResponse,
+  authenticateRequest,
   createProject,
   formatCount,
   getHandoffSummary,
-  isAuthorizedRequest,
+  isRedisOutageError,
   listProjects,
   logDecision,
   logProgress,
   recordBudget,
-  unauthorizedResponse,
+  withObservability,
 } from "@/lib/ledger";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -26,18 +28,34 @@ const ok = (text: string): CallToolResult => ({ content: [{ type: "text", text }
 
 const failed = (error: unknown): CallToolResult => {
   if (error instanceof LedgerError) {
+    const retryHint =
+      error.code === "storage_unavailable" || error.code === "service_unavailable"
+        ? " Please retry in a moment."
+        : "";
     return {
-      content: [{ type: "text", text: `Error (${error.code}): ${error.message}` }],
+      content: [{ type: "text", text: `Error (${error.code}): ${error.message}${retryHint}` }],
       isError: true,
     };
   }
 
-  console.error("[context-ledger] tool call failed", error);
+  if (isRedisOutageError(error)) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "Error (storage_unavailable): Storage is temporarily unavailable. Please retry your request in a moment.",
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  console.error("[context-ledger] tool call failed", error instanceof Error ? error.message : error);
   return {
     content: [
       {
         type: "text",
-        text: "Error (internal_error): the ledger store could not be reached. Try again in a moment.",
+        text: "Error (storage_unavailable): The ledger store could not be reached. Please retry your request in a moment.",
       },
     ],
     isError: true,
@@ -246,11 +264,15 @@ const handler = createMcpHandler(
 );
 
 async function handleRequest(request: Request): Promise<Response> {
-  const rateLimited = await rateLimit(request, { limit: 60, prefix: "mcp" });
-  if (rateLimited) return rateLimited;
+  return withObservability(request, async () => {
+    const rateLimited = await rateLimit(request, { limit: 60, prefix: "mcp" });
+    if (rateLimited) return rateLimited;
 
-  if (!isAuthorizedRequest(request)) return unauthorizedResponse();
-  return handler(request);
+    const auth = authenticateRequest(request);
+    if (!auth.ok) return authErrorResponse(auth);
+
+    return handler(request);
+  });
 }
 
 export { handleRequest as GET, handleRequest as POST };

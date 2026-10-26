@@ -1,8 +1,8 @@
 import {
   archiveProject,
-  isAuthorizedRequest,
-  ledgerErrorResponse,
-  unauthorizedResponse,
+  authErrorResponse,
+  authenticateRequest,
+  withObservability,
 } from "@/lib/ledger";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -13,16 +13,15 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const rateLimited = await rateLimit(request, { limit: 120, prefix: "projects" });
-  if (rateLimited) return rateLimited;
+  return withObservability(request, async () => {
+    const rateLimited = await rateLimit(request, { limit: 120, prefix: "projects" });
+    if (rateLimited) return rateLimited;
 
-  if (!isAuthorizedRequest(request)) return unauthorizedResponse();
+    const auth = authenticateRequest(request);
+    if (!auth.ok) return authErrorResponse(auth);
 
-  try {
     const { id } = await context.params;
     const project = await archiveProject(id);
     return Response.json({ ok: true, project }, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) {
-    return ledgerErrorResponse(error);
-  }
+  });
 }

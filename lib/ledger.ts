@@ -1,5 +1,6 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Redis } from "@upstash/redis";
+import { getClientIpInfo } from "./rate-limit";
 
 /**
  * Context Ledger — persistent project memory for AI clients.
@@ -9,6 +10,7 @@ import { Redis } from "@upstash/redis";
  */
 
 export const API_KEY_ENV = "CONTEXT_LEDGER_API_KEY";
+export const API_KEYS_ENV = "CONTEXT_LEDGER_API_KEYS";
 
 const REDIS_URL_ENV_NAMES = ["UPSTASH_REDIS_REST_URL", "KV_REST_API_URL"];
 const REDIS_TOKEN_ENV_NAMES = ["UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_TOKEN"];
@@ -26,15 +28,22 @@ export const LIMITS = {
   reason: 2000,
   progress: 4000,
   projectId: 200,
-  entriesPerProject: 200,
+  entriesPerProject: 1000,
   budgetSnapshotsPerProject: 50,
+  maxActiveProjects: 200,
   projectsListed: 200,
   handoffEntriesPerSection: 5,
 } as const;
 
 export type EntryType = "decision" | "progress" | "issue" | "next";
 export type BudgetAction = "continue" | "warn" | "stop_and_summarize";
-export type LedgerErrorCode = "invalid_input" | "not_found" | "storage_unavailable";
+export type LedgerErrorCode =
+  | "invalid_input"
+  | "not_found"
+  | "storage_unavailable"
+  | "service_unavailable"
+  | "max_projects_reached"
+  | "max_entries_reached";
 
 export const BUDGET_GUIDANCE: Record<BudgetAction, string> = {
   continue: "keep working",
@@ -104,6 +113,8 @@ interface LedgerStore {
   get(id: string): Promise<ProjectRecord | null>;
   put(project: ProjectRecord): Promise<void>;
   ids(): Promise<string[]>;
+  appendEntries(id: string, entries: LedgerEntry[]): Promise<ProjectRecord>;
+  recordBudget(id: string, snapshot: BudgetSnapshot): Promise<ProjectRecord>;
 }
 
 interface LedgerGlobal {
@@ -124,15 +135,45 @@ class MemoryLedgerStore implements LedgerStore {
   }
 
   async get(id: string): Promise<ProjectRecord | null> {
-    return this.records.get(id) ?? null;
+    const record = this.records.get(id);
+    return record ? normalizeProject(record) : null;
   }
 
   async put(project: ProjectRecord): Promise<void> {
-    this.records.set(project.id, project);
+    this.records.set(project.id, normalizeProject(project));
   }
 
   async ids(): Promise<string[]> {
     return [...this.records.keys()];
+  }
+
+  async appendEntries(id: string, newEntries: LedgerEntry[]): Promise<ProjectRecord> {
+    const project = this.records.get(id);
+    if (!project) {
+      throw new LedgerError("not_found", `No project found with id "${id}". Call create_project first.`);
+    }
+    if (project.entries.length + newEntries.length > LIMITS.entriesPerProject) {
+      throw new LedgerError(
+        "max_entries_reached",
+        `Project entry limit reached (maximum ${LIMITS.entriesPerProject} entries).`,
+      );
+    }
+    project.entries.push(...newEntries);
+    project.updated_at = newEntries[newEntries.length - 1].timestamp;
+    return normalizeProject(project);
+  }
+
+  async recordBudget(id: string, snapshot: BudgetSnapshot): Promise<ProjectRecord> {
+    const project = this.records.get(id);
+    if (!project) {
+      throw new LedgerError("not_found", `No project found with id "${id}". Call create_project first.`);
+    }
+    project.budget_snapshots.push(snapshot);
+    if (project.budget_snapshots.length > LIMITS.budgetSnapshotsPerProject) {
+      project.budget_snapshots = project.budget_snapshots.slice(-LIMITS.budgetSnapshotsPerProject);
+    }
+    project.updated_at = snapshot.timestamp;
+    return normalizeProject(project);
   }
 }
 
@@ -140,18 +181,114 @@ class RedisLedgerStore implements LedgerStore {
   constructor(private readonly redis: Redis) {}
 
   async get(id: string): Promise<ProjectRecord | null> {
-    const record = (await this.redis.get(PROJECT_KEY_PREFIX + id)) as ProjectRecord | null;
-    return record ?? null;
+    const metaKey = PROJECT_KEY_PREFIX + id;
+    const entriesKey = `${metaKey}:entries`;
+    const budgetsKey = `${metaKey}:budgets`;
+
+    const [record, rawEntries, rawBudgets] = await Promise.all([
+      this.redis.get<ProjectRecord>(metaKey),
+      this.redis.lrange<string | LedgerEntry>(entriesKey, 0, -1),
+      this.redis.lrange<string | BudgetSnapshot>(budgetsKey, 0, -1),
+    ]);
+
+    if (!record) return null;
+
+    const normalized = normalizeProject(record);
+
+    // Read-time fallback: if Redis list has items, use them; otherwise keep old embedded record.entries
+    if (rawEntries && rawEntries.length > 0) {
+      normalized.entries = rawEntries.map((item) =>
+        typeof item === "string" ? JSON.parse(item) : item,
+      );
+    }
+
+    if (rawBudgets && rawBudgets.length > 0) {
+      normalized.budget_snapshots = rawBudgets.map((item) =>
+        typeof item === "string" ? JSON.parse(item) : item,
+      );
+    }
+
+    return normalized;
   }
 
   async put(project: ProjectRecord): Promise<void> {
-    await this.redis.set(PROJECT_KEY_PREFIX + project.id, project);
+    const metaKey = PROJECT_KEY_PREFIX + project.id;
+    await this.redis.set(metaKey, project);
     await this.redis.sadd(PROJECT_INDEX_KEY, project.id);
   }
 
   async ids(): Promise<string[]> {
     const ids = await this.redis.smembers(PROJECT_INDEX_KEY);
     return Array.isArray(ids) ? ids.map((id) => String(id)) : [];
+  }
+
+  async appendEntries(id: string, newEntries: LedgerEntry[]): Promise<ProjectRecord> {
+    const metaKey = PROJECT_KEY_PREFIX + id;
+    const entriesKey = `${metaKey}:entries`;
+
+    const [rawRecord, listLen] = await Promise.all([
+      this.redis.get<ProjectRecord>(metaKey),
+      this.redis.llen(entriesKey),
+    ]);
+
+    if (!rawRecord) {
+      throw new LedgerError("not_found", `No project found with id "${id}". Call create_project first.`);
+    }
+
+    // Migration fallback: if list is empty but old record has embedded entries, migrate them
+    let currentCount = listLen;
+    const oldEntries = Array.isArray(rawRecord.entries) ? rawRecord.entries : [];
+    if (listLen === 0 && oldEntries.length > 0) {
+      const serializedOld = oldEntries.map((e) => JSON.stringify(e));
+      await this.redis.rpush(entriesKey, ...serializedOld);
+      currentCount = oldEntries.length;
+    }
+
+    if (currentCount + newEntries.length > LIMITS.entriesPerProject) {
+      throw new LedgerError(
+        "max_entries_reached",
+        `Project entry limit reached (maximum ${LIMITS.entriesPerProject} entries).`,
+      );
+    }
+
+    const serializedNew = newEntries.map((e) => JSON.stringify(e));
+    await this.redis.rpush(entriesKey, ...serializedNew);
+
+    const timestamp = newEntries[newEntries.length - 1].timestamp;
+    rawRecord.updated_at = timestamp;
+    await this.redis.set(metaKey, rawRecord);
+
+    const project = await this.get(id);
+    return project ?? normalizeProject(rawRecord);
+  }
+
+  async recordBudget(id: string, snapshot: BudgetSnapshot): Promise<ProjectRecord> {
+    const metaKey = PROJECT_KEY_PREFIX + id;
+    const budgetsKey = `${metaKey}:budgets`;
+
+    const [rawRecord, listLen] = await Promise.all([
+      this.redis.get<ProjectRecord>(metaKey),
+      this.redis.llen(budgetsKey),
+    ]);
+
+    if (!rawRecord) {
+      throw new LedgerError("not_found", `No project found with id "${id}". Call create_project first.`);
+    }
+
+    const oldSnapshots = Array.isArray(rawRecord.budget_snapshots) ? rawRecord.budget_snapshots : [];
+    if (listLen === 0 && oldSnapshots.length > 0) {
+      const serializedOld = oldSnapshots.map((s) => JSON.stringify(s));
+      await this.redis.rpush(budgetsKey, ...serializedOld);
+    }
+
+    await this.redis.rpush(budgetsKey, JSON.stringify(snapshot));
+    await this.redis.ltrim(budgetsKey, -LIMITS.budgetSnapshotsPerProject, -1);
+
+    rawRecord.updated_at = snapshot.timestamp;
+    await this.redis.set(metaKey, rawRecord);
+
+    const project = await this.get(id);
+    return project ?? normalizeProject(rawRecord);
   }
 }
 
@@ -161,6 +298,12 @@ function pickEnv(names: string[]): string | undefined {
     if (value && value.trim().length > 0) return value.trim();
   }
   return undefined;
+}
+
+export function getStorageType(): "redis" | "memory" {
+  const url = pickEnv(REDIS_URL_ENV_NAMES);
+  const token = pickEnv(REDIS_TOKEN_ENV_NAMES);
+  return url && token ? "redis" : "memory";
 }
 
 function redisFromEnv(): Redis | null {
@@ -201,10 +344,28 @@ export function getStore(): LedgerStore {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Auth                                                                        */
+/* Auth & Key Rotation                                                         */
 /* -------------------------------------------------------------------------- */
 
 let warnedAboutMissingKey = false;
+
+export function getConfiguredApiKeys(): string[] {
+  const keys: string[] = [];
+  const single = process.env[API_KEY_ENV];
+  if (single && single.trim().length > 0) {
+    keys.push(single.trim());
+  }
+  const multi = process.env[API_KEYS_ENV];
+  if (multi && multi.trim().length > 0) {
+    for (const key of multi.split(",")) {
+      const trimmed = key.trim();
+      if (trimmed.length > 0) {
+        keys.push(trimmed);
+      }
+    }
+  }
+  return Array.from(new Set(keys));
+}
 
 export function extractBearerToken(header: string | null | undefined): string | null {
   if (!header) return null;
@@ -213,15 +374,15 @@ export function extractBearerToken(header: string | null | undefined): string | 
   return token && token.length > 0 ? token : null;
 }
 
-/** Constant-time comparison of the supplied key against CONTEXT_LEDGER_API_KEY. */
+/** Constant-time comparison of the supplied key against all candidate keys. */
 export function verifyApiKey(provided: string | null | undefined): boolean {
-  const expected = process.env[API_KEY_ENV];
+  const keys = getConfiguredApiKeys();
 
-  if (!expected) {
+  if (keys.length === 0) {
     if (!warnedAboutMissingKey) {
       warnedAboutMissingKey = true;
       console.error(
-        `[context-ledger] ${API_KEY_ENV} is not set — every request will be rejected with 401.`,
+        `[context-ledger] Neither ${API_KEY_ENV} nor ${API_KEYS_ENV} is set — every request will be rejected with 503.`,
       );
     }
     return false;
@@ -230,40 +391,163 @@ export function verifyApiKey(provided: string | null | undefined): boolean {
   if (!provided) return false;
 
   const supplied = Buffer.from(provided, "utf8");
-  const reference = Buffer.from(expected, "utf8");
+  let matched = false;
 
-  if (supplied.length !== reference.length) {
-    // Compare the reference against itself so the failure path still costs a comparison.
-    timingSafeEqual(reference, reference);
-    return false;
+  for (const expectedKey of keys) {
+    const reference = Buffer.from(expectedKey, "utf8");
+    if (supplied.length === reference.length) {
+      if (timingSafeEqual(supplied, reference)) {
+        matched = true;
+      }
+    } else {
+      timingSafeEqual(reference, reference);
+    }
   }
 
-  return timingSafeEqual(supplied, reference);
+  return matched;
+}
+
+export type AuthState =
+  | { ok: true }
+  | { ok: false; status: 503; code: "service_unavailable"; message: string }
+  | { ok: false; status: 401; code: "unauthorized"; message: string };
+
+export function authenticateRequest(request: Request): AuthState {
+  const keys = getConfiguredApiKeys();
+  if (keys.length === 0) {
+    return {
+      ok: false,
+      status: 503,
+      code: "service_unavailable",
+      message: "No API key configured on this server. Set CONTEXT_LEDGER_API_KEY or CONTEXT_LEDGER_API_KEYS.",
+    };
+  }
+
+  const token = extractBearerToken(request.headers.get("authorization"));
+  if (!token || !verifyApiKey(token)) {
+    return {
+      ok: false,
+      status: 401,
+      code: "unauthorized",
+      message: "Missing or invalid bearer API key.",
+    };
+  }
+
+  return { ok: true };
 }
 
 export function isAuthorizedRequest(request: Request): boolean {
-  return verifyApiKey(extractBearerToken(request.headers.get("authorization")));
+  return authenticateRequest(request).ok;
+}
+
+export function authErrorResponse(auth: Extract<AuthState, { ok: false }>): Response {
+  const headers: Record<string, string> = {};
+  if (auth.status === 401) {
+    headers["WWW-Authenticate"] = "Bearer";
+  }
+  return Response.json(
+    { error: auth.code, message: auth.message },
+    { status: auth.status, headers },
+  );
 }
 
 export function unauthorizedResponse(): Response {
+  const auth = authenticateRequest({ headers: new Headers() } as unknown as Request);
+  if (!auth.ok) {
+    return authErrorResponse(auth);
+  }
   return Response.json(
     { error: "unauthorized", message: "Missing or invalid bearer API key." },
     { status: 401, headers: { "WWW-Authenticate": "Bearer" } },
   );
 }
 
+export function isRedisOutageError(error: unknown): boolean {
+  if (error instanceof LedgerError && error.code === "storage_unavailable") {
+    return true;
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    const name = error.name.toLowerCase();
+    return (
+      name.includes("upstash") ||
+      msg.includes("fetch failed") ||
+      msg.includes("econnrefused") ||
+      msg.includes("enotfound") ||
+      msg.includes("etimedout") ||
+      msg.includes("redis")
+    );
+  }
+  return false;
+}
+
 export function ledgerErrorResponse(error: unknown): Response {
   if (error instanceof LedgerError) {
     const status =
-      error.code === "not_found" ? 404 : error.code === "invalid_input" ? 400 : 503;
+      error.code === "not_found"
+        ? 404
+        : error.code === "storage_unavailable" || error.code === "service_unavailable"
+          ? 503
+          : error.code === "max_projects_reached" ||
+            error.code === "max_entries_reached" ||
+            error.code === "invalid_input"
+            ? 400
+            : 500;
     return Response.json({ error: error.code, message: error.message }, { status });
   }
 
-  console.error("[context-ledger] unexpected failure", error);
+  if (isRedisOutageError(error)) {
+    return Response.json(
+      {
+        error: "storage_unavailable",
+        message: "Storage is temporarily unavailable. Please retry your request in a moment.",
+      },
+      { status: 503 },
+    );
+  }
+
+  console.error("[context-ledger] unexpected internal failure", error instanceof Error ? error.message : error);
   return Response.json(
-    { error: "internal_error", message: "The ledger store could not be reached. Try again in a moment." },
+    {
+      error: "internal_error",
+      message: "An unexpected error occurred. Please retry your request in a moment.",
+    },
     { status: 500 },
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Observability                                                               */
+/* -------------------------------------------------------------------------- */
+
+export function hashIp(ip: string): string {
+  return createHash("sha256").update(ip).digest("hex").slice(0, 16);
+}
+
+export async function withObservability(
+  request: Request,
+  handler: () => Promise<Response>,
+): Promise<Response> {
+  const startTime = performance.now();
+  const { ip } = getClientIpInfo(request);
+  let response: Response;
+  try {
+    response = await handler();
+  } catch (err) {
+    response = ledgerErrorResponse(err);
+  }
+  const ms = Math.round(performance.now() - startTime);
+  const path = new URL(request.url).pathname;
+  console.log(
+    JSON.stringify({
+      method: request.method,
+      path,
+      status: response.status,
+      ms,
+      ip_hash: hashIp(ip),
+    }),
+  );
+  return response;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -359,6 +643,15 @@ export async function createProject(input: { name: unknown; goal: unknown }): Pr
   const name = requireText(input?.name, "name", LIMITS.name);
   const goal = requireText(input?.goal, "goal", LIMITS.goal);
 
+  // Requirement 3: max 200 active projects
+  const activeProjects = await listProjects();
+  if (activeProjects.length >= LIMITS.maxActiveProjects) {
+    throw new LedgerError(
+      "max_projects_reached",
+      `Active project limit reached (maximum ${LIMITS.maxActiveProjects}). Archive an inactive project before creating a new one.`,
+    );
+  }
+
   const now = new Date().toISOString();
   const project: ProjectRecord = {
     id: randomUUID(),
@@ -394,7 +687,7 @@ async function appendEntries(
   projectId: unknown,
   drafts: EntryDraft[],
 ): Promise<{ project: ProjectRecord; entries: LedgerEntry[] }> {
-  const project = await getProject(projectId);
+  const id = requireText(projectId, "project_id", LIMITS.projectId);
   const timestamp = new Date().toISOString();
 
   const entries: LedgerEntry[] = drafts.map((draft) => ({
@@ -405,14 +698,8 @@ async function appendEntries(
     timestamp,
   }));
 
-  const updated: ProjectRecord = {
-    ...project,
-    entries: [...project.entries, ...entries].slice(-LIMITS.entriesPerProject),
-    updated_at: timestamp,
-  };
-
-  await getStore().put(updated);
-  return { project: updated, entries };
+  const project = await getStore().appendEntries(id, entries);
+  return { project, entries };
 }
 
 export async function logDecision(input: {
@@ -452,7 +739,7 @@ export async function recordBudget(input: {
   tokens_used: unknown;
   token_limit: unknown;
 }): Promise<{ project: ProjectRecord; snapshot: BudgetSnapshot }> {
-  const project = await getProject(input?.project_id);
+  const id = requireText(input?.project_id, "project_id", LIMITS.projectId);
   const tokensUsed = requireWholeNumber(input?.tokens_used, "tokens_used", 0);
   const tokenLimit = requireWholeNumber(input?.token_limit, "token_limit", 1);
 
@@ -465,14 +752,8 @@ export async function recordBudget(input: {
     timestamp: new Date().toISOString(),
   };
 
-  const updated: ProjectRecord = {
-    ...project,
-    budget_snapshots: [...project.budget_snapshots, snapshot].slice(-LIMITS.budgetSnapshotsPerProject),
-    updated_at: snapshot.timestamp,
-  };
-
-  await getStore().put(updated);
-  return { project: updated, snapshot };
+  const project = await getStore().recordBudget(id, snapshot);
+  return { project, snapshot };
 }
 
 export async function archiveProject(projectId: unknown): Promise<ProjectRecord> {
@@ -528,7 +809,7 @@ export async function getProjectDetail(projectId: unknown): Promise<ProjectDetai
 }
 
 /* -------------------------------------------------------------------------- */
-/* Handoff summary                                                             */
+/* Handoff summary & Export                                                    */
 /* -------------------------------------------------------------------------- */
 
 function pushSection(lines: string[], heading: string, body: string[]): void {
@@ -631,4 +912,12 @@ export async function getHandoffSummary(
 ): Promise<{ project: ProjectRecord; summary: string }> {
   const project = await getProject(projectId);
   return { project, summary: buildHandoffSummary(project, maxSectionEntries) };
+}
+
+export function sanitizeFilename(name: string): string {
+  const cleaned = name
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return cleaned || "handoff";
 }
