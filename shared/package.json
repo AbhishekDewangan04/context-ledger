@@ -1,0 +1,11 @@
+{
+  "name": "@context-ledger/shared",
+  "version": "1.0.0",
+  "private": true,
+  "types": "./types.ts",
+  "exports": {
+    ".": {
+      "types": "./types.ts"
+    }
+  }
+}

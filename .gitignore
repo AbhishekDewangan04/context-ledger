@@ -1,9 +1,15 @@
 node_modules
 .next
+frontend/.next
+backend/dist
 out
 .vercel
 *.tsbuildinfo
 .env
 .env.local
 .env*.local
+frontend/.env
+frontend/.env*.local
+backend/.env
+backend/.env*.local
 .DS_Store
