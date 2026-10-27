@@ -11,7 +11,9 @@
     "dev": "node scripts/dev.mjs",
     "dev:frontend": "npm run dev --workspace context-ledger-frontend",
     "dev:backend": "npm run dev --workspace context-ledger-backend",
-    "build": "npm run build --workspace context-ledger-frontend && npm run build --workspace context-ledger-backend",
+    "build": "npm run build --workspace context-ledger-frontend",
+    "build:all": "npm run build --workspace context-ledger-frontend && npm run build --workspace context-ledger-backend",
+    "build:backend": "npm run build --workspace context-ledger-backend",
     "typecheck": "npm run typecheck --workspace context-ledger-frontend && npm run typecheck --workspace context-ledger-backend",
     "seed": "npm run seed --workspace context-ledger-backend",
     "smoke": "npm run smoke --workspace context-ledger-backend"
